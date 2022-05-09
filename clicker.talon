@@ -1,0 +1,1 @@
+click <user.clickable_targets>: user.click(clickable_targets)
