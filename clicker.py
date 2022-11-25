@@ -19,10 +19,107 @@ I always have to drag those things which is super annoying.
 
 Useful snippets for debugging in repel:
 
+from talon import ui
 children = ui.apps(name="Google Chrome")[0].children
 button = children.find(role="AXButton")[1]
 link = children.find(role="AXLink")[1]
+field = children.find(role="AXTextField")[0]
+some = ui.apps(name="Google Chrome")[0].children.find()[53]
+
+Regular content respects visible well.
+Things like sidebars don't.
+It basically things its 'stuck' at the top.
+If you scroll the position does not change.
+Once it does scroll into view, only then it starts updating position.
+It can scroll out of range tho. 
+Tested with sidebar on this site https://appdividend.com/2021/06/21/python-set-contains/
+
+paragraphs as AXStaticText
+
+AXGroup ~= div
+
+AXLink
+- AXStaticText as a child
+- Has AXDescription == child.value
+
+AXTextField 
+- look at AXDescription (no value)
+- AXPlaceholderValue (same)
+AXCheckBox - for example agreing to stuff. Look for AXTitle
+
+print_hierarchy(children[0])
 '''
+
+from talon import ui
+def try_or(func, default=None, expected_exc=(Exception,)):
+    try:
+        return func()
+    except expected_exc:
+        return default
+
+def element_hash(element):
+    attributes = element.attrs
+    result = 0
+    for attribute in attributes:
+        value = try_or(lambda: str(element[attribute]), '')
+        result += hash(value)
+    return result
+
+def print_with(identifier):
+    all = ui.apps(name="Google Chrome")[0].children.find(visible_only = True)
+    target = [*filter(lambda c: try_or(lambda: c['ChromeAXNodeId'], '') == str(identifier), all)][0]
+    ie(target)
+
+def print_hierarchy(visible, element: ui.Element, offset = 0):
+    if element_hash(element) not in visible: 
+        return
+    attributes = [
+        'AXTitle',
+        'AXValue',
+        'AXDescription',
+        'AXRole',
+        'AXSubrole',
+        'ChromeAXNodeId'
+    ]
+    attribute_values = [
+        (attribute, element[attribute]) 
+        for attribute in attributes
+        if try_or(lambda: element[attribute], '')
+    ]
+    print('')
+    for attribute, value in attribute_values:
+        print(' ' * offset + attribute[2:] + ' : ' + str(value))
+    for child in element.children:
+        print_hierarchy(visible, child, offset + 2)
+
+def visible():
+    children = ui.apps(name="Google Chrome")[0].children
+    visible_children = set(
+        map(
+            element_hash, 
+            children.find(visible_only = True)
+        )
+    )
+    def enumerate_children(element):
+        if not element.children: 
+            return [element]
+        else:
+            result = [element]
+            for child in element.children:
+                result.extend(enumerate_children(child))
+            return result
+    # for child in enumerate_children(children[0]):
+    #     if hash(child.attrs) in visible_children:
+    #         ie(child)
+    for child in children:
+        print_hierarchy(visible_children, child)
+    # def counter(element):
+    #     if not element.children: return 1
+    #     return 1 + sum([counter(child) for child in element.children])
+    # print(len(enumerate_children(children[0])))
+    # print(sum([counter(child) for child in children]))
+    # print(len(children.find(visible_only = True)))
+    print(len(visible_children))
 
 mod = Module()
 mod.list("clickable_targets", desc="Descriptions of all clickable targets onscreen, for example a name of a button or a link name")
@@ -31,12 +128,6 @@ ctx = Context()
 # AXDescription -> ui.Element
 description_element_map: Dict[str, ui.Element] = {}
 clickables: List[ui.Element] = []
-
-def try_or(func, default=None, expected_exc=(Exception,)):
-    try:
-        return func()
-    except expected_exc:
-        return default
 
 def update_clickable_list():
     global description_element_map
